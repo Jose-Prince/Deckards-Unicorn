@@ -6,6 +6,15 @@ from torch.utils.data import DataLoader
 from transformers import GPT2Tokenizer
 
 tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+tokenizer.pad_token = tokenizer.eos_token
+
+def tokenize_function(examples):
+    return tokenizer(
+        examples["dialog"],
+        truncation=True,
+        padding="max_length",
+        max_length=128
+    )
 
 def load_dataset():
     train_df = pd.read_csv("data/train.csv")
@@ -23,21 +32,15 @@ def load_dataset():
     })
 
     # Tokenize the dialogs from the dataset
-    tokenizer.pad_token = tokenizer.eos_token
-
     tokenized_datasets = dataset.map(tokenize_function, batched=True)
     tokenized_datasets = tokenized_datasets.map(
         lambda x: {"labels": x["input_ids"]}, batched=True
     )
     tokenized_datasets.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
 
-    return DataLoader(tokenized_datasets["train"], batch_size=8, shuffle=True), DataLoader(tokenized_datasets["validation"], batch_size=8)
+    train_loader = DataLoader(tokenized_datasets["train"], batch_size=8, shuffle=True)
+    val_loader = DataLoader(tokenized_datasets["validation"], batch_size=8)
 
-def tokenize_function(examples):
-    return tokenizer(
-        examples["dialog"],
-        truncation=True,
-        padding="max_length",
-        max_length=128
-    )
+    return train_loader, val_loader
+
 

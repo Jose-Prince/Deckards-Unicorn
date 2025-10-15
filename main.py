@@ -14,7 +14,7 @@ if not os.path.exists("./gpt_dialog_model.pt"):
     train_loader, val_loader = load_dataset()
     train(tokenizer, model, train_loader, val_loader)
 
-model.load_state_dict(torch.load("gpt_dialog_model.pt"))
+model.load_state_dict(torch.load("gpt_dialog_model.pt", map_location=device))
 
 def generate_text(model, tokenizer, prompt, max_length=50, temperature=1.0, top_k=50):
     model.eval()
@@ -22,13 +22,16 @@ def generate_text(model, tokenizer, prompt, max_length=50, temperature=1.0, top_
 
     with torch.no_grad():
         for _ in range(max_length):
-            logits = model(tokens)
+            # Only use the last block_size tokens if sequence gets too long
+            context = tokens if tokens.size(1) <= model.block_size else tokens[:, -model.block_size:]
+            
+            logits = model(context)
             logits = logits[:, -1, :] / temperature
 
             top_k_values, top_k_indices = torch.topk(logits, k=top_k)
             probs = torch.softmax(top_k_values, dim=-1)
-            next_token = top_k_indices[0, torch.multinomial(probs, num_samples=1)]
-            next_token = next_token.unsqueeze(0)  # ← mantiene batch dimension correcta
+            next_token_idx = torch.multinomial(probs, num_samples=1)
+            next_token = top_k_indices.gather(-1, next_token_idx)
 
             tokens = torch.cat([tokens, next_token], dim=1)
 
@@ -38,6 +41,6 @@ def generate_text(model, tokenizer, prompt, max_length=50, temperature=1.0, top_
     return tokenizer.decode(tokens[0], skip_special_tokens=True)
 
 
-prompt = "Hello"
+prompt = "Hello, how are you?"
 response = generate_text(model, tokenizer, prompt, max_length=60)
 print(response)

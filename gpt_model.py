@@ -15,6 +15,7 @@ from tqdm import tqdm
 class GPT(nn.Module):
     def __init__(self, vocab_size, n_embd=256, n_heads=8, n_layers=4, block_size=128):
         super().__init__()
+        self.block_size = block_size
         self.tok_emb = nn.Embedding(vocab_size, n_embd)
         self.pos_emb = nn.Embedding(block_size, n_embd)
         self.blocks = nn.ModuleList([
@@ -31,12 +32,29 @@ class GPT(nn.Module):
 
     def forward(self, idx, attention_mask=None):
         B, T = idx.shape
+        
+        # Token and position embeddings
         tok_emb = self.tok_emb(idx)
         pos_emb = self.pos_emb(torch.arange(T, device=idx.device))
         x = tok_emb + pos_emb
+        
+        # Create causal mask (prevents attending to future tokens)
+        causal_mask = torch.triu(torch.ones(T, T, device=idx.device), diagonal=1).bool()
+        
+        # Create padding mask (True for padding tokens that should be ignored)
+        if attention_mask is not None:
+            padding_mask = (attention_mask == 0)  # True where we should ignore
+        else:
+            padding_mask = None
+        
+        # Apply transformer blocks
         for block in self.blocks:
-            x = block(x, src_key_padding_mask=~attention_mask.bool() if attention_mask is not None else None)
+            x = block(
+                x, 
+                src_mask=causal_mask,
+                src_key_padding_mask=padding_mask
+            )
+        
         x = self.ln_f(x)
         logits = self.head(x)
         return logits
-

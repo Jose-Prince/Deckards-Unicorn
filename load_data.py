@@ -8,6 +8,19 @@ from transformers import GPT2Tokenizer
 tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 tokenizer.pad_token = tokenizer.eos_token
 
+def clean_text(text):
+    text = text.strip("[]")
+    text = text.replace("\\n", " ")
+    text = text.replace("\n", " ")
+    text = text.replace("'", "")
+    text = text.replace('"', "")
+    text = text.replace(" ,", ",")
+    text = text.replace(" ?", "?")
+    text = text.replace(" .", ".")
+    text = text.replace(" !", "!")
+    text = " ".join(text.split())
+    return text
+
 def tokenize_function(examples):
     return tokenizer(
         examples["dialog"],
@@ -20,6 +33,10 @@ def load_dataset():
     train_df = pd.read_csv("data/train.csv")
     valid_df = pd.read_csv("data/validation.csv")
     test_df = pd.read_csv("data/test.csv")
+
+    train_df["dialog"] = train_df["dialog"].apply(clean_text)
+    valid_df["dialog"] = valid_df["dialog"].apply(clean_text)
+    test_df["dialog"] = test_df["dialog"].apply(clean_text)
 
     train_dataset = Dataset.from_pandas(train_df)
     validation_dataset = Dataset.from_pandas(valid_df)
@@ -42,5 +59,7 @@ def load_dataset():
     val_loader = DataLoader(tokenized_datasets["validation"], batch_size=8)
 
     return train_loader, val_loader
+
+load_dataset()
 
 

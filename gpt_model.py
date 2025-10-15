@@ -29,6 +29,7 @@ class GPT(nn.Module):
         ])
         self.ln_f = nn.LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, vocab_size)
+        self.head.weight = self.tok_emb.weight
 
     def forward(self, idx, attention_mask=None):
         B, T = idx.shape

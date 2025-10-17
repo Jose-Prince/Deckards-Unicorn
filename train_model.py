@@ -20,13 +20,13 @@ def train(tokenizer, model, train_loader, val_loader, epochs=3):
 
         for batch in train_progress:
             inputs = batch["input_ids"].to(device)
-            labels = batch["labels"].to(device)
             attention_mask = batch["attention_mask"].to(device)
 
             optimizer.zero_grad()
-            logits = model(inputs, attention_mask=attention_mask)
+            logits = model(inputs[:, :-1], attention_mask=attention_mask[:, :-1])
+            targets = inputs[:, 1:].contiguous()
 
-            loss = criterion(logits.view(-1, logits.size(-1)), labels.view(-1))
+            loss = criterion(logits.view(-1, logits.size(-1)), targets.view(-1))
             loss.backward()
             optimizer.step()
 
@@ -44,12 +44,11 @@ def train(tokenizer, model, train_loader, val_loader, epochs=3):
         with torch.no_grad():
             for batch in val_progress:
                 inputs = batch["input_ids"].to(device)
-                labels = batch["labels"].to(device)
                 attention_mask = batch["attention_mask"].to(device)
-                logits = model(inputs, attention_mask=attention_mask)
-                loss = criterion(logits.view(-1, logits.size(-1)), labels.view(-1))
+                logits = model(inputs[:, :-1], attention_mask=attention_mask[:, :-1])
+                targets = inputs[:, 1:].contiguous()
+                loss = criterion(logits.view(-1, logits.size(-1)), targets.view(-1))
                 val_loss += loss.item()
-                val_progress.set_postfix({"val_loss": loss.item()})
 
         print(f"Validation Loss: {val_loss / len(val_loader):.4f}")
 

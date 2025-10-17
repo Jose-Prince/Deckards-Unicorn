@@ -31,12 +31,21 @@ def generate_text(model, tokenizer, prompt, max_length=50, temperature=0.8, top_
             
             logits = model(context)
             logits = logits[:, -1, :] / temperature
+            if torch.isnan(logits).any():
+                print("⚠️ NaN en logits")
+
             probs = torch.softmax(logits, dim=-1)
             sorted_probs, sorted_indices = torch.sort(probs, descending=True)
             cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
             sorted_indices_to_remove = cumulative_probs > top_p
             sorted_probs[sorted_indices_to_remove] = 0
+            sorted_probs = torch.clamp(sorted_probs, min=1e-10)  # evita ceros exactos
             sorted_probs /= sorted_probs.sum()
+
+            if torch.isnan(sorted_probs).any() or torch.isinf(sorted_probs).any():
+                print("⚠️ Warning: NaN o inf en sorted_probs, saltando paso")
+                break
+
 
             next_token = torch.multinomial(sorted_probs, num_samples=1)
             next_token = sorted_indices.gather(-1, next_token)
@@ -49,6 +58,6 @@ def generate_text(model, tokenizer, prompt, max_length=50, temperature=0.8, top_
     return tokenizer.decode(tokens[0], skip_special_tokens=True)
 
 
-prompt = "Hello, how are you?"
+prompt = "I am 22 years old"
 response = generate_text(model, tokenizer, prompt, max_length=60)
 print(response)

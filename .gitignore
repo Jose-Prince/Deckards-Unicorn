@@ -207,3 +207,100 @@ marimo/_lsp/
 __marimo__/
 
 data/
+
+# =========================================
+# Unity .gitignore para proyecto 2D
+# =========================================
+
+# Archivos y carpetas generadas por Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+UserSettings/
+
+# Archivos de cache de paquetes
+[Pp]ackages/com.unity.package-manager/
+[Pp]ackages/packages-lock.json
+
+# Cache de Asset Store
+[Aa]sset[Ss]toreTools*
+
+# Compilaciones locales (Android, iOS, etc.)
+*.apk
+*.aab
+*.unitypackage
+*.app
+*.xcworkspace
+*.xcuserstate
+*.xcuserdata/
+
+# Archivos del editor de Unity
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.pidb.meta
+
+# Archivos de Visual Studio / Rider / VSCode
+.vscode/
+.idea/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.dll
+*.exe
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Configuración de colaboración local
+.vs/
+*.orig
+*.log
+*.cache
+
+# Configuración de plataformas móviles
+.gradle/
+.gradle-cache/
+Pods/
+DerivedData/
+
+# Archivos del modo Play en el editor
+*.playback/
+
+# Carpetas personalizadas que no deben subirse (opcional)
+# Añade aquí si usas recursos temporales:
+# Assets/Art/Temp/
+# Assets/Textures/Raw/
+# Assets/Scripts/Experimental/
+
+# =========================================
+# Archivos que SÍ deben incluirse
+# =========================================
+
+# Mantén los metadatos de Unity
+!*.meta
+
+# Scripts, escenas y assets del proyecto
+!Assets/
+!ProjectSettings/
+!Packages/

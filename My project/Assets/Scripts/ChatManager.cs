@@ -1,28 +1,25 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using Unity.Netcode;
+using Unity.Collections;
 
-public class ChatManager : MonoBehaviour
+public class ChatManager : NetworkBehaviour
 {
     [Header("UI References")]
     [SerializeField] private TMP_InputField messageInputField;
     [SerializeField] private Button sendButton;
-    [SerializeField] private Transform messageContent; // The Content object inside ScrollView
+    [SerializeField] private Transform messageContent;
     [SerializeField] private GameObject messagePrefab;
     [SerializeField] private ScrollRect scrollRect;
 
     [Header("Settings")]
-    [SerializeField] private int maxMessages = 50; // Limit messages to prevent performance issues
+    [SerializeField] private int maxMessages = 50;
 
     private void Start()
     {
-        // Add listener to send button
         sendButton.onClick.AddListener(SendMessage);
-        
-        // Allow sending with Enter key
         messageInputField.onSubmit.AddListener(delegate { SendMessage(); });
-        
-        // Focus input field at start
         messageInputField.ActivateInputField();
     }
 
@@ -30,49 +27,83 @@ public class ChatManager : MonoBehaviour
     {
         string messageText = messageInputField.text.Trim();
         
-        // Don't send empty messages
         if (string.IsNullOrEmpty(messageText))
-        {
             return;
-        }
 
-        // Create new message
-        AddMessageToChat("You", messageText);
+        // Enviar mensaje al servidor
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
+        {
+            SendMessageServerRpc(messageText);
+        }
+        else
+        {
+            // Si no hay conexión, solo muestra localmente (modo prueba)
+            AddMessageToChat("You", messageText);
+        }
         
-        // Clear input field
         messageInputField.text = "";
-        
-        // Refocus input field
         messageInputField.ActivateInputField();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void SendMessageServerRpc(string message, ServerRpcParams rpcParams = default)
+    {
+        // Obtener el ID del cliente que envió el mensaje
+        ulong senderId = rpcParams.Receive.SenderClientId;
+        
+        Debug.Log($"Server received message from client {senderId}: {message}");
+        
+        // Reenviar a TODOS los clientes (incluyendo el que lo envió)
+        ReceiveMessageClientRpc(senderId, message);
+    }
+
+    [ClientRpc]
+    private void ReceiveMessageClientRpc(ulong senderId, string message)
+    {
+        Debug.Log($"Client received message from {senderId}: {message}");
+        
+        // Determinar el nombre del remitente
+        string senderName;
+        if (NetworkManager.Singleton != null && senderId == NetworkManager.Singleton.LocalClientId)
+        {
+            senderName = "You";
+        }
+        else
+        {
+            senderName = $"User {senderId}";
+        }
+        
+        AddMessageToChat(senderName, message);
     }
 
     private void AddMessageToChat(string sender, string message)
     {
-        // Limit number of messages
+        // Limitar número de mensajes
         if (messageContent.childCount >= maxMessages)
         {
             Destroy(messageContent.GetChild(0).gameObject);
         }
 
-        // Instantiate message prefab
+        // Crear nuevo mensaje
         GameObject newMessage = Instantiate(messagePrefab, messageContent);
-        
-        // Set message text
         TMP_Text messageText = newMessage.GetComponentInChildren<TMP_Text>();
+        
         if (messageText != null)
         {
             messageText.text = $"<b>{sender}:</b> {message}";
         }
 
-        // Scroll to bottom
+        // Scroll al final
         Canvas.ForceUpdateCanvases();
         scrollRect.verticalNormalizedPosition = 0f;
     }
 
     private void Update()
     {
-        // Alternative: Send with Enter, new line with Shift+Enter
-        if (Input.GetKeyDown(KeyCode.Return) && !Input.GetKey(KeyCode.LeftShift) && !Input.GetKey(KeyCode.RightShift))
+        // Enviar con Enter (sin Shift)
+        if (Input.GetKeyDown(KeyCode.Return) && 
+            !Input.GetKey(KeyCode.LeftShift) && 
+            !Input.GetKey(KeyCode.RightShift))
         {
             if (!messageInputField.isFocused)
             {

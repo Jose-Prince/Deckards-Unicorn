@@ -20,7 +20,7 @@ if not os.path.exists("./gpt_dialog_model.pt"):
 
 model.load_state_dict(torch.load("gpt_dialog_model.pt", map_location=device))
 
-def generate_text(model, tokenizer, prompt, max_length=50, temperature=0.8, top_k=50, top_p=0.9):
+def generate_text(model, tokenizer, prompt, max_length=50, temperature=0.6, top_k=50, top_p=0.9):
     model.eval()
     tokens = tokenizer.encode(prompt, return_tensors="pt").to(next(model.parameters()).device)
 
@@ -58,6 +58,6 @@ def generate_text(model, tokenizer, prompt, max_length=50, temperature=0.8, top_
     return tokenizer.decode(tokens[0], skip_special_tokens=True)
 
 
-prompt = "I am 22 years old"
+prompt = "Who are you?"
 response = generate_text(model, tokenizer, prompt, max_length=60)
 print(response)

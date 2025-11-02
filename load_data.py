@@ -59,7 +59,3 @@ def load_dataset():
     val_loader = DataLoader(tokenized_datasets["validation"], batch_size=8)
 
     return train_loader, val_loader
-
-load_dataset()
-
-

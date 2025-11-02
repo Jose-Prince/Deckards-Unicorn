@@ -1,15 +1,5 @@
-import pandas as pd
-from datasets import Dataset, DatasetDict
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
-from torch.optim import Adam 
-from torch.utils.data import DataLoader
-
-from transformers import GPT2Tokenizer
-from tqdm import tqdm
 
 # Deep Learning model
 class GPT(nn.Module):

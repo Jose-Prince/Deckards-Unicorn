@@ -1,23 +1,16 @@
 import pandas as pd
 from datasets import Dataset, DatasetDict
-
 from torch.utils.data import DataLoader
-
 from transformers import GPT2Tokenizer
 
 tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-tokenizer.pad_token = tokenizer.eos_token
+tokenizer.pad_token = tokenizer.eos_token  # para evitar error de padding
 
 def clean_text(text):
     text = text.strip("[]")
-    text = text.replace("\\n", " ")
-    text = text.replace("\n", " ")
-    text = text.replace("'", "")
-    text = text.replace('"', "")
-    text = text.replace(" ,", ",")
-    text = text.replace(" ?", "?")
-    text = text.replace(" .", ".")
-    text = text.replace(" !", "!")
+    text = text.replace("\\n", " ").replace("\n", " ")
+    text = text.replace("'", "").replace('"', "")
+    text = text.replace(" ,", ",").replace(" ?", "?").replace(" .", ".").replace(" !", "!")
     text = " ".join(text.split())
     return text
 
@@ -34,9 +27,8 @@ def load_dataset():
     valid_df = pd.read_csv("data/validation.csv")
     test_df = pd.read_csv("data/test.csv")
 
-    train_df["dialog"] = train_df["dialog"].apply(clean_text)
-    valid_df["dialog"] = valid_df["dialog"].apply(clean_text)
-    test_df["dialog"] = test_df["dialog"].apply(clean_text)
+    for df in [train_df, valid_df, test_df]:
+        df["dialog"] = df["dialog"].apply(clean_text)
 
     train_dataset = Dataset.from_pandas(train_df)
     validation_dataset = Dataset.from_pandas(valid_df)
@@ -48,14 +40,11 @@ def load_dataset():
         "test": test_dataset
     })
 
-    # Tokenize the dialogs from the dataset
-    tokenized_datasets = dataset.map(tokenize_function, batched=True)
-    tokenized_datasets = tokenized_datasets.map(
-        lambda x: {"labels": x["input_ids"]}, batched=True
-    )
-    tokenized_datasets.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+    tokenized = dataset.map(tokenize_function, batched=True)
+    tokenized = tokenized.map(lambda x: {"labels": x["input_ids"]}, batched=True)
+    tokenized.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
 
-    train_loader = DataLoader(tokenized_datasets["train"], batch_size=8, shuffle=True)
-    val_loader = DataLoader(tokenized_datasets["validation"], batch_size=8)
+    train_loader = DataLoader(tokenized["train"], batch_size=2, shuffle=True)
+    val_loader = DataLoader(tokenized["validation"], batch_size=2)
 
     return train_loader, val_loader

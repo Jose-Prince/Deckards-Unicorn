@@ -36,6 +36,7 @@ public class SimpleNetworkManager : MonoBehaviour
     [SerializeField] private Button returnButton;
     [SerializeField] private Button leaveButton;
 
+    private string currentRoomCode;
     private NetworkManager networkManager;
     private UnityTransport transport;
     private Dictionary<ulong, GameObject> playerListItems = new();
@@ -77,9 +78,14 @@ public class SimpleNetworkManager : MonoBehaviour
             Allocation allocation = await RelayService.Instance.CreateAllocationAsync(8); // Max players
 
             string joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+            currentRoomCode = joinCode;
+
             codeRoomText.text = $"Room Code: {joinCode}";
             codeRoomText.gameObject.SetActive(true);
             copyButton.gameObject.SetActive(true);
+
+            copyButton.onClick.RemoveAllListeners();
+            copyButton.onClick.AddListener(CopyRoomCodeToClipboard);
 
             transport.SetRelayServerData(
                 allocation.RelayServer.IpV4,
@@ -240,5 +246,18 @@ public class SimpleNetworkManager : MonoBehaviour
 
         networkManager.Shutdown();
         HideConnectedPanel();
+    }
+
+    private void CopyRoomCodeToClipboard()
+    {
+        if (!string.IsNullOrEmpty(currentRoomCode))
+        {
+            GUIUtility.systemCopyBuffer = currentRoomCode;
+            Debug.Log($"Copied room code to clipboard: {currentRoomCode}");
+        }
+        else 
+        {
+            Debug.LogWarning("No room code to copy.");
+        }
     }
 }

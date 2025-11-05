@@ -467,7 +467,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -14.386841, y: -2.7919922}
+  m_AnchoredPosition: {x: -14.386902, y: -2.7919922}
   m_SizeDelta: {x: -184.332, y: -134.482}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &134324835
@@ -2485,7 +2485,6 @@ MonoBehaviour:
   playerListItemPrefab: {fileID: 7610939167926195748, guid: 7119693128e6ea54980d468d4fa63f0a, type: 3}
   startChatButton: {fileID: 1401433763}
   chatSceneName: ChatScene
-  port: 7777
   returnButton: {fileID: 1137065945}
   leaveButton: {fileID: 2032035267}
 --- !u!114 &1479554119
@@ -2500,7 +2499,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6960e84d07fb87f47956e7a81d71c4e6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Transports.UTP.UnityTransport
-  m_ProtocolType: 0
+  m_ProtocolType: 1
   m_UseWebSockets: 0
   m_UseEncryption: 0
   m_MaxPacketQueueSize: 128

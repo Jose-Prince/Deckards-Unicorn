@@ -5,6 +5,10 @@ using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine.SceneManagement;
 using System.Collections.Generic;
+using Unity.Services.Core;
+using Unity.Services.Authentication;
+using Unity.Services.Relay;
+using Unity.Services.Relay.Models;
 
 public class SimpleNetworkManager : MonoBehaviour
 {
@@ -16,110 +20,129 @@ public class SimpleNetworkManager : MonoBehaviour
 
     [Header("UI References - Lobby")]
     [SerializeField] private Transform playersListContent;
-    [SerializeField] private GameObject playerListItemPrefab; // Simple Text prefab
+    [SerializeField] private GameObject playerListItemPrefab;
     [SerializeField] private Button startChatButton;
 
     [Header("Settings")]
     [SerializeField] private string chatSceneName = "ChatScene";
-    [SerializeField] private ushort port = 7777;
 
     [SerializeField] private Button returnButton;
     [SerializeField] private Button leaveButton;
 
     private NetworkManager networkManager;
     private UnityTransport transport;
-    private Dictionary<ulong, GameObject> playerListItems = new Dictionary<ulong, GameObject>();
-
+    private Dictionary<ulong, GameObject> playerListItems = new();
 
     private void Awake()
     {
         DontDestroyOnLoad(gameObject);
     }
 
-    private void Start()
+    private async void Start()
     {
         networkManager = NetworkManager.Singleton;
         transport = networkManager.GetComponent<UnityTransport>();
 
-        // Configurar UI inicial
-        ipAddressInput.text = "127.0.0.1";
-        
-        // Añadir listeners a botones
+        await UnityServices.InitializeAsync();
+        if (!AuthenticationService.Instance.IsSignedIn)
+        {
+            await AuthenticationService.Instance.SignInAnonymouslyAsync();
+        }
+
+        statusText.text = $"Connected to Unity Services.";
+
         hostButton.onClick.AddListener(StartHost);
         joinButton.onClick.AddListener(StartClient);
         startChatButton.onClick.AddListener(LoadChatScene);
 
-        statusText.text = $"Your IP: {GetLocalIPAddress()}";
-
-        // Suscribirse a eventos de red
         networkManager.OnClientConnectedCallback += OnClientConnected;
         networkManager.OnClientDisconnectCallback += OnClientDisconnected;
 
-        returnButton.onClick.AddListener(() => 
-            SceneManager.LoadScene("MainMenu")
-        );
-
+        returnButton.onClick.AddListener(() => SceneManager.LoadScene("MainMenu"));
         leaveButton.onClick.AddListener(LeaveGame);
         leaveButton.gameObject.SetActive(false);
     }
 
-    private void StartHost()
+    private async void StartHost()
     {
-        transport.SetConnectionData("0.0.0.0", port);
+        try
+        {
+            statusText.text = "Creating Relay allocation...";
 
-        if (networkManager.StartHost())
-        {
-            statusText.text = $"Hosting on IP: {GetLocalIPAddress()}:{port}";
-            Debug.Log("Started as Host");
-            
-            // Mostrar panel de jugadores conectados
-            ShowConnectedPanel();
-            
-            // Agregar el host a la lista
-            AddPlayerToList(networkManager.LocalClientId, "You (Host)");
+            // 👇 CORRECTO
+            Allocation allocation = await RelayService.Instance.CreateAllocationAsync(8);
+
+            string joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+            statusText.text = $"Room Code: {joinCode}";
+            Debug.Log($"Relay room created. Join code: {joinCode}");
+
+            transport.SetRelayServerData(
+                allocation.RelayServer.IpV4,
+                (ushort)allocation.RelayServer.Port,
+                allocation.AllocationIdBytes,
+                allocation.Key,
+                allocation.ConnectionData
+            );
+
+            if (networkManager.StartHost())
+            {
+                ShowConnectedPanel();
+                AddPlayerToList(networkManager.LocalClientId, "You (Host)");
+            }
         }
-        else
+        catch (RelayServiceException e)
         {
-            statusText.text = "Failed to start host!";
-            Debug.LogError("Failed to start host");
+            statusText.text = "Relay Host Error: " + e.Message;
+            Debug.LogError(e);
         }
     }
 
-    private void StartClient()
+    private async void StartClient()
     {
-        string ipAddress = ipAddressInput.text.Trim();
+        string joinCode = ipAddressInput.text.Trim();
 
-        if (string.IsNullOrEmpty(ipAddress))
+        if (string.IsNullOrEmpty(joinCode))
         {
-            statusText.text = "Please enter an IP address!";
+            statusText.text = "Enter a room code!";
             return;
         }
 
-        transport.SetConnectionData(ipAddress, port);
+        try
+        {
+            statusText.text = "Joining Relay...";
 
-        if (networkManager.StartClient())
-        {
-            statusText.text = $"Connecting to {ipAddress}:{port}...";
-            Debug.Log($"Attempting to connect to {ipAddress}:{port}");
+            JoinAllocation joinAlloc = await RelayService.Instance.JoinAllocationAsync(joinCode);
+
+            transport.SetRelayServerData(
+                joinAlloc.RelayServer.IpV4,
+                (ushort)joinAlloc.RelayServer.Port,
+                joinAlloc.AllocationIdBytes,
+                joinAlloc.Key,
+                joinAlloc.ConnectionData,
+                joinAlloc.HostConnectionData
+            );
+
+            if (networkManager.StartClient())
+            {
+                statusText.text = $"Joined room {joinCode}";
+            }
         }
-        else
+        catch (RelayServiceException e)
         {
-            statusText.text = "Failed to start client!";
-            Debug.LogError("Failed to start client");
+            statusText.text = "Join failed: " + e.Message;
+            Debug.LogError(e);
         }
     }
 
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"Client {clientId} connected!");
-        
-        // Si es el cliente local que se conectó
+
         if (clientId == networkManager.LocalClientId)
         {
             statusText.text = "Connected successfully!";
             ShowConnectedPanel();
-            
-            // Si no es el host, agregar "You" a la lista
+
             if (!networkManager.IsHost)
             {
                 AddPlayerToList(clientId, "You");
@@ -127,7 +150,6 @@ public class SimpleNetworkManager : MonoBehaviour
         }
         else
         {
-            // Otro jugador se conectó
             AddPlayerToList(clientId, $"Player {clientId}");
         }
     }
@@ -135,11 +157,9 @@ public class SimpleNetworkManager : MonoBehaviour
     private void OnClientDisconnected(ulong clientId)
     {
         Debug.Log($"Client {clientId} disconnected");
-        
-        // Remover de la lista
+
         RemovePlayerFromList(clientId);
-        
-        // Si nosotros nos desconectamos
+
         if (clientId == networkManager.LocalClientId)
         {
             statusText.text = "Disconnected from server";
@@ -149,26 +169,21 @@ public class SimpleNetworkManager : MonoBehaviour
 
     private void ShowConnectedPanel()
     {
-        // Ocultar controles de conexión
         hostButton.gameObject.SetActive(false);
         joinButton.gameObject.SetActive(false);
         ipAddressInput.gameObject.SetActive(false);
         leaveButton.gameObject.SetActive(true);
-        
-        // Solo el host puede iniciar el chat
-        startChatButton.gameObject.SetActive(networkManager.IsHost);
 
+        startChatButton.gameObject.SetActive(networkManager.IsHost);
     }
 
     private void HideConnectedPanel()
     {
-        // Mostrar controles de conexión
         hostButton.gameObject.SetActive(true);
         joinButton.gameObject.SetActive(true);
         ipAddressInput.gameObject.SetActive(true);
         leaveButton.gameObject.SetActive(false);
-        
-        // Limpiar lista
+
         foreach (var item in playerListItems.Values)
         {
             Destroy(item);
@@ -178,22 +193,13 @@ public class SimpleNetworkManager : MonoBehaviour
 
     private void AddPlayerToList(ulong clientId, string playerName)
     {
-        // No agregar duplicados
-        if (playerListItems.ContainsKey(clientId))
-            return;
+        if (playerListItems.ContainsKey(clientId)) return;
 
-        // Crear nuevo item en la lista
         GameObject listItem = Instantiate(playerListItemPrefab, playersListContent);
         TMP_Text text = listItem.GetComponentInChildren<TMP_Text>();
-        
-        if (text != null)
-        {
-            text.text = $" {playerName}";
-        }
+        if (text != null) text.text = $" {playerName}";
 
         playerListItems.Add(clientId, listItem);
-        
-        Debug.Log($"Added {playerName} to player list");
     }
 
     private void RemovePlayerFromList(ulong clientId)
@@ -209,22 +215,8 @@ public class SimpleNetworkManager : MonoBehaviour
     {
         if (networkManager.IsHost)
         {
-            // El host carga la escena para todos
             networkManager.SceneManager.LoadScene(chatSceneName, LoadSceneMode.Single);
         }
-    }
-
-    private string GetLocalIPAddress()
-    {
-        var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
-        foreach (var ip in host.AddressList)
-        {
-            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-            {
-                return ip.ToString();
-            }
-        }
-        return "No IP Found";
     }
 
     private void OnDestroy()
@@ -238,20 +230,9 @@ public class SimpleNetworkManager : MonoBehaviour
 
     private void LeaveGame()
     {
-        if (networkManager == null)
-            return;
+        if (networkManager == null) return;
 
-        if (networkManager.IsHost)
-        {
-            networkManager.Shutdown();
-            Debug.Log("Client stopped the server.");
-        }
-        else if (networkManager.IsClient)
-        {
-            networkManager.Shutdown();
-            Debug.Log("Client disconnected from server.");
-        }
-
+        networkManager.Shutdown();
         HideConnectedPanel();
     }
 }

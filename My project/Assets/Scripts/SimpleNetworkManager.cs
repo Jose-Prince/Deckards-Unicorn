@@ -10,7 +10,7 @@ using Unity.Services.Authentication;
 using Unity.Services.Relay;
 using Unity.Services.Relay.Models;
 
-public class SimpleNetworkManager : MonoBehaviour
+public class SimpleNetworkManager : NetworkBehaviour
 {
     [Header("UI References - Connection")]
     [SerializeField] private Button hostButton;
@@ -36,8 +36,10 @@ public class SimpleNetworkManager : MonoBehaviour
     [SerializeField] private Button returnButton;
     [SerializeField] private Button leaveButton;
 
+    private string playerName = "Player";
     private string currentRoomCode;
     private NetworkManager networkManager;
+    private NetworkList<PlayerData> players = new NetworkList<PlayerData>();
     private UnityTransport transport;
     private Dictionary<ulong, GameObject> playerListItems = new();
 
@@ -69,6 +71,16 @@ public class SimpleNetworkManager : MonoBehaviour
         leaveButton.gameObject.SetActive(false);
         codeRoomText.gameObject.SetActive(false);
         copyButton.gameObject.SetActive(false);
+
+        nameButton.onClick.AddListener(SetPlayerName);
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        if (IsServer)
+        {
+            players.OnListChanged += OnPlayersListChanged;
+        }
     }
 
     private async void StartHost()
@@ -98,7 +110,7 @@ public class SimpleNetworkManager : MonoBehaviour
             if (networkManager.StartHost())
             {
                 ShowConnectedPanel();
-                AddPlayerToList(networkManager.LocalClientId, "You (Host)");
+                AddPlayerToList(networkManager.LocalClientId, $"{playerName} (Host)");
             }
 
             joinLabel.gameObject.SetActive(false);
@@ -144,34 +156,35 @@ public class SimpleNetworkManager : MonoBehaviour
 
     private void OnClientConnected(ulong clientId)
     {
-        Debug.Log($"Client {clientId} connected!");
-
-        if (clientId == networkManager.LocalClientId)
+        if (IsServer)
         {
-            ShowConnectedPanel();
+            string nameToAdd = clientId == NetworkManager.Singleton.LocalClientId
+                ? $"{playerName} (Host)"
+                : $"Player {clientId}";
 
-            if (!networkManager.IsHost)
+            players.Add(new PlayerData
             {
-                AddPlayerToList(clientId, "You");
-            }
-        }
-        else
-        {
-            AddPlayerToList(clientId, $"Player {clientId}");
+                clientId = clientId,
+                playerName = nameToAdd
+            });
         }
     }
 
     private void OnClientDisconnected(ulong clientId)
     {
-        Debug.Log($"Client {clientId} disconnected");
-
-        RemovePlayerFromList(clientId);
-
-        if (clientId == networkManager.LocalClientId)
+        if (IsServer)
         {
-            HideConnectedPanel();
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (players[i].clientId == clientId)
+                {
+                    players.RemoveAt(i);
+                    break;
+                }
+            }
         }
     }
+
 
     private void ShowConnectedPanel()
     {
@@ -260,4 +273,34 @@ public class SimpleNetworkManager : MonoBehaviour
             Debug.LogWarning("No room code to copy.");
         }
     }
+
+    private void SetPlayerName()
+    {
+        string enteredName = nameInput.text.Trim();
+
+        if (!string.IsNullOrEmpty(enteredName))
+        {
+            playerName = enteredName;
+            Debug.Log($"Player name set to: {playerName}");
+        }
+        else 
+        {
+            Debug.LogWarning("Name cannot be empty!");
+        }
+    }
+
+    private void OnPlayersListChanged(NetworkListEvent<PlayerData> changeEvent)
+    {
+        foreach (var item in playerListItems.Values)
+        {
+            Destroy(item);
+        }
+        playerListItems.Clear();
+
+        foreach (var player in players)
+        {
+            AddPlayerToList(player.clientId, player.playerName.ToString());
+        }
+    }
+
 }

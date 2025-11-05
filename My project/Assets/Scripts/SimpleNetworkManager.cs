@@ -15,7 +15,6 @@ public class SimpleNetworkManager : MonoBehaviour
     [SerializeField] private TMP_Text statusText;
 
     [Header("UI References - Lobby")]
-    [SerializeField] private GameObject connectedPanel;
     [SerializeField] private Transform playersListContent;
     [SerializeField] private GameObject playerListItemPrefab; // Simple Text prefab
     [SerializeField] private Button startChatButton;
@@ -24,9 +23,13 @@ public class SimpleNetworkManager : MonoBehaviour
     [SerializeField] private string chatSceneName = "ChatScene";
     [SerializeField] private ushort port = 7777;
 
+    [SerializeField] private Button returnButton;
+    [SerializeField] private Button leaveButton;
+
     private NetworkManager networkManager;
     private UnityTransport transport;
     private Dictionary<ulong, GameObject> playerListItems = new Dictionary<ulong, GameObject>();
+
 
     private void Awake()
     {
@@ -40,7 +43,6 @@ public class SimpleNetworkManager : MonoBehaviour
 
         // Configurar UI inicial
         ipAddressInput.text = "127.0.0.1";
-        connectedPanel.SetActive(false);
         
         // Añadir listeners a botones
         hostButton.onClick.AddListener(StartHost);
@@ -52,6 +54,13 @@ public class SimpleNetworkManager : MonoBehaviour
         // Suscribirse a eventos de red
         networkManager.OnClientConnectedCallback += OnClientConnected;
         networkManager.OnClientDisconnectCallback += OnClientDisconnected;
+
+        returnButton.onClick.AddListener(() => 
+            SceneManager.LoadScene("MainMenu")
+        );
+
+        leaveButton.onClick.AddListener(LeaveGame);
+        leaveButton.gameObject.SetActive(false);
     }
 
     private void StartHost()
@@ -144,12 +153,11 @@ public class SimpleNetworkManager : MonoBehaviour
         hostButton.gameObject.SetActive(false);
         joinButton.gameObject.SetActive(false);
         ipAddressInput.gameObject.SetActive(false);
-        
-        // Mostrar panel de jugadores
-        connectedPanel.SetActive(true);
+        leaveButton.gameObject.SetActive(true);
         
         // Solo el host puede iniciar el chat
         startChatButton.gameObject.SetActive(networkManager.IsHost);
+
     }
 
     private void HideConnectedPanel()
@@ -158,9 +166,7 @@ public class SimpleNetworkManager : MonoBehaviour
         hostButton.gameObject.SetActive(true);
         joinButton.gameObject.SetActive(true);
         ipAddressInput.gameObject.SetActive(true);
-        
-        // Ocultar panel de jugadores
-        connectedPanel.SetActive(false);
+        leaveButton.gameObject.SetActive(false);
         
         // Limpiar lista
         foreach (var item in playerListItems.Values)
@@ -178,11 +184,11 @@ public class SimpleNetworkManager : MonoBehaviour
 
         // Crear nuevo item en la lista
         GameObject listItem = Instantiate(playerListItemPrefab, playersListContent);
-        TMP_Text text = listItem.GetComponent<TMP_Text>();
+        TMP_Text text = listItem.GetComponentInChildren<TMP_Text>();
         
         if (text != null)
         {
-            text.text = $"• {playerName}";
+            text.text = $" {playerName}";
         }
 
         playerListItems.Add(clientId, listItem);
@@ -228,5 +234,24 @@ public class SimpleNetworkManager : MonoBehaviour
             networkManager.OnClientConnectedCallback -= OnClientConnected;
             networkManager.OnClientDisconnectCallback -= OnClientDisconnected;
         }
+    }
+
+    private void LeaveGame()
+    {
+        if (networkManager == null)
+            return;
+
+        if (networkManager.IsHost)
+        {
+            networkManager.Shutdown();
+            Debug.Log("Client stopped the server.");
+        }
+        else if (networkManager.IsClient)
+        {
+            networkManager.Shutdown();
+            Debug.Log("Client disconnected from server.");
+        }
+
+        HideConnectedPanel();
     }
 }

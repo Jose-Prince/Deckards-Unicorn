@@ -306,3 +306,4 @@ DerivedData/
 !Packages/
 
 *.pt
+gpt_dialog_model/

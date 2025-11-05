@@ -16,7 +16,13 @@ public class SimpleNetworkManager : MonoBehaviour
     [SerializeField] private Button hostButton;
     [SerializeField] private Button joinButton;
     [SerializeField] private TMP_InputField ipAddressInput;
-    [SerializeField] private TMP_Text statusText;
+    [SerializeField] private TMP_Text codeRoomText;
+    [SerializeField] private Button copyButton;
+    [SerializeField] private TMP_Text joinLabel;
+
+    [Header("UI References - Player Name")]
+    [SerializeField] private TMP_InputField nameInput;
+    [SerializeField] private Button nameButton;
 
     [Header("UI References - Lobby")]
     [SerializeField] private Transform playersListContent;
@@ -26,6 +32,7 @@ public class SimpleNetworkManager : MonoBehaviour
     [Header("Settings")]
     [SerializeField] private string chatSceneName = "ChatScene";
 
+    [Header("PageButtons")]
     [SerializeField] private Button returnButton;
     [SerializeField] private Button leaveButton;
 
@@ -49,8 +56,6 @@ public class SimpleNetworkManager : MonoBehaviour
             await AuthenticationService.Instance.SignInAnonymouslyAsync();
         }
 
-        statusText.text = $"Connected to Unity Services.";
-
         hostButton.onClick.AddListener(StartHost);
         joinButton.onClick.AddListener(StartClient);
         startChatButton.onClick.AddListener(LoadChatScene);
@@ -61,20 +66,20 @@ public class SimpleNetworkManager : MonoBehaviour
         returnButton.onClick.AddListener(() => SceneManager.LoadScene("MainMenu"));
         leaveButton.onClick.AddListener(LeaveGame);
         leaveButton.gameObject.SetActive(false);
+        codeRoomText.gameObject.SetActive(false);
+        copyButton.gameObject.SetActive(false);
     }
 
     private async void StartHost()
     {
         try
         {
-            statusText.text = "Creating Relay allocation...";
-
-            // 👇 CORRECTO
-            Allocation allocation = await RelayService.Instance.CreateAllocationAsync(8);
+            Allocation allocation = await RelayService.Instance.CreateAllocationAsync(8); // Max players
 
             string joinCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
-            statusText.text = $"Room Code: {joinCode}";
-            Debug.Log($"Relay room created. Join code: {joinCode}");
+            codeRoomText.text = $"Room Code: {joinCode}";
+            codeRoomText.gameObject.SetActive(true);
+            copyButton.gameObject.SetActive(true);
 
             transport.SetRelayServerData(
                 allocation.RelayServer.IpV4,
@@ -89,10 +94,11 @@ public class SimpleNetworkManager : MonoBehaviour
                 ShowConnectedPanel();
                 AddPlayerToList(networkManager.LocalClientId, "You (Host)");
             }
+
+            joinLabel.gameObject.SetActive(false);
         }
         catch (RelayServiceException e)
         {
-            statusText.text = "Relay Host Error: " + e.Message;
             Debug.LogError(e);
         }
     }
@@ -103,14 +109,11 @@ public class SimpleNetworkManager : MonoBehaviour
 
         if (string.IsNullOrEmpty(joinCode))
         {
-            statusText.text = "Enter a room code!";
             return;
         }
 
         try
         {
-            statusText.text = "Joining Relay...";
-
             JoinAllocation joinAlloc = await RelayService.Instance.JoinAllocationAsync(joinCode);
 
             transport.SetRelayServerData(
@@ -124,12 +127,11 @@ public class SimpleNetworkManager : MonoBehaviour
 
             if (networkManager.StartClient())
             {
-                statusText.text = $"Joined room {joinCode}";
+                Debug.Log($"Joined room {joinCode}");
             }
         }
         catch (RelayServiceException e)
         {
-            statusText.text = "Join failed: " + e.Message;
             Debug.LogError(e);
         }
     }
@@ -140,7 +142,6 @@ public class SimpleNetworkManager : MonoBehaviour
 
         if (clientId == networkManager.LocalClientId)
         {
-            statusText.text = "Connected successfully!";
             ShowConnectedPanel();
 
             if (!networkManager.IsHost)
@@ -162,7 +163,6 @@ public class SimpleNetworkManager : MonoBehaviour
 
         if (clientId == networkManager.LocalClientId)
         {
-            statusText.text = "Disconnected from server";
             HideConnectedPanel();
         }
     }
@@ -230,6 +230,12 @@ public class SimpleNetworkManager : MonoBehaviour
 
     private void LeaveGame()
     {
+        codeRoomText.gameObject.SetActive(false);
+        copyButton.gameObject.SetActive(false);
+        ipAddressInput.gameObject.SetActive(true);
+        joinButton.gameObject.SetActive(true);
+        joinLabel.gameObject.SetActive(true);
+
         if (networkManager == null) return;
 
         networkManager.Shutdown();

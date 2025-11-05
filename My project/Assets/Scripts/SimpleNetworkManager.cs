@@ -81,6 +81,19 @@ public class SimpleNetworkManager : NetworkBehaviour
         {
             players.OnListChanged += OnPlayersListChanged;
         }
+        else
+        {
+            // Client-only code: populate the list with existing players
+            players.OnListChanged += OnPlayersListChanged;
+            
+            foreach (var player in players)
+            {
+                AddPlayerToList(player.clientId, player.playerName.ToString());
+            }
+
+            // Send player name to server when client spawns
+            SubmitPlayerNameServerRpc(playerName);
+        }
     }
 
     private async void StartHost()
@@ -109,8 +122,10 @@ public class SimpleNetworkManager : NetworkBehaviour
 
             if (networkManager.StartHost())
             {
+                if (!IsSpawned)
+                    GetComponent<NetworkObject>().Spawn();
+
                 ShowConnectedPanel();
-                AddPlayerToList(networkManager.LocalClientId, $"{playerName} (Host)");
             }
 
             joinLabel.gameObject.SetActive(false);
@@ -146,6 +161,11 @@ public class SimpleNetworkManager : NetworkBehaviour
             if (networkManager.StartClient())
             {
                 Debug.Log($"Joined room {joinCode}");
+                
+                if (!IsSpawned)
+                    GetComponent<NetworkObject>().Spawn();
+                    
+                ShowConnectedPanel();
             }
         }
         catch (RelayServiceException e)
@@ -168,6 +188,11 @@ public class SimpleNetworkManager : NetworkBehaviour
                 playerName = nameToAdd
             });
         }
+        else if (clientId == NetworkManager.Singleton.LocalClientId)
+        {
+            // Client connected successfully, show the connected panel
+            ShowConnectedPanel();
+        }
     }
 
     private void OnClientDisconnected(ulong clientId)
@@ -185,6 +210,25 @@ public class SimpleNetworkManager : NetworkBehaviour
         }
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    private void SubmitPlayerNameServerRpc(string name, ServerRpcParams serverRpcParams = default)
+    {
+        ulong clientId = serverRpcParams.Receive.SenderClientId;
+
+        // Find and update the player's name in the list
+        for (int i = 0; i < players.Count; i++)
+        {
+            if (players[i].clientId == clientId)
+            {
+                players[i] = new PlayerData
+                {
+                    clientId = clientId,
+                    playerName = name
+                };
+                break;
+            }
+        }
+    }
 
     private void ShowConnectedPanel()
     {
@@ -245,6 +289,11 @@ public class SimpleNetworkManager : NetworkBehaviour
             networkManager.OnClientConnectedCallback -= OnClientConnected;
             networkManager.OnClientDisconnectCallback -= OnClientDisconnected;
         }
+
+        if (players != null)
+        {
+            players.OnListChanged -= OnPlayersListChanged;
+        }
     }
 
     private void LeaveGame()
@@ -282,6 +331,12 @@ public class SimpleNetworkManager : NetworkBehaviour
         {
             playerName = enteredName;
             Debug.Log($"Player name set to: {playerName}");
+
+            // If already connected, update the name on the server
+            if (IsSpawned && !IsServer)
+            {
+                SubmitPlayerNameServerRpc(playerName);
+            }
         }
         else 
         {

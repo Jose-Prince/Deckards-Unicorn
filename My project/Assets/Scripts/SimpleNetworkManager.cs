@@ -50,8 +50,8 @@ public class SimpleNetworkManager : NetworkBehaviour
     private UnityTransport transport;
     private Dictionary<ulong, GameObject> playerListItems = new();
 
-    private NetworkVariable<ulong> impostorClientId = new NetworkVariable<ulong>(0);
-    private bool impostorIsAI = false;
+    public NetworkVariable<ulong> impostorClientId = new NetworkVariable<ulong>(0);
+    public bool impostorIsAI = false;
 
     private void Awake()
     {
@@ -410,7 +410,7 @@ public class SimpleNetworkManager : NetworkBehaviour
         if (randomNumber > playerCount)
         {
             impostorIsAI = true;
-            impostorClientId.Value = 0;
+            impostorClientId.Value = ulong.MaxValue;
         }
         else
         {
@@ -419,6 +419,7 @@ public class SimpleNetworkManager : NetworkBehaviour
             impostorClientId.Value = impostorId;
         }
     }
+
 
     [ClientRpc]
     private void UpdateCountdownClientRpc(float duration, float elapsed)

@@ -50,6 +50,9 @@ public class SimpleNetworkManager : NetworkBehaviour
     private UnityTransport transport;
     private Dictionary<ulong, GameObject> playerListItems = new();
 
+    private NetworkVariable<ulong> impostorClientId = new NetworkVariable<ulong>(0);
+    private bool impostorIsAI = false;
+
     private void Awake()
     {
         DontDestroyOnLoad(gameObject);
@@ -391,7 +394,30 @@ public class SimpleNetworkManager : NetworkBehaviour
             yield return null;
         }
 
+        if (IsServer)
+        {
+            DetermineImpostor();
+        }
+
         LoadGameSceneClientRpc();
+    }
+
+    private void DetermineImpostor()
+    {
+        int playerCount = players.Count;
+        int randomNumber = Random.Range(1, playerCount + 2);
+
+        if (randomNumber > playerCount)
+        {
+            impostorIsAI = true;
+            impostorClientId.Value = 0;
+        }
+        else
+        {
+            impostorIsAI = false;
+            ulong impostorId = players[randomNumber - 1].clientId;
+            impostorClientId.Value = impostorId;
+        }
     }
 
     [ClientRpc]

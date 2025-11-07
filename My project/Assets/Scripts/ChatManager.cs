@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using Unity.Netcode;
 using Unity.Collections;
+using System.Collections;
 
 public class ChatManager : NetworkBehaviour
 {
@@ -13,14 +14,37 @@ public class ChatManager : NetworkBehaviour
     [SerializeField] private GameObject messagePrefab;
     [SerializeField] private ScrollRect scrollRect;
 
+    [Header("Countdown UI")]
+    [SerializeField] private GameObject countdownPanel;
+    [SerializeField] private TMP_Text countdownText;
+    [SerializeField] private float countdownTime = 45f;
+
     [Header("Settings")]
     [SerializeField] private int maxMessages = 50;
 
     private void Start()
     {
+        StartCoroutine(StartCountdown());
+
         sendButton.onClick.AddListener(SendMessage);
         messageInputField.onSubmit.AddListener(delegate { SendMessage(); });
         messageInputField.ActivateInputField();
+    }
+
+    private IEnumerator StartCountdown()
+    {
+        float remaining = countdownTime;
+
+        countdownPanel.SetActive(true);
+
+        while (remaining > 0)
+        {
+            countdownText.text = Mathf.Ceil(remaining).ToString();
+            yield return new WaitForSeconds(1f);
+            remaining--;
+        }
+
+        countdownPanel.SetActive(false);
     }
 
     public void SendMessage()

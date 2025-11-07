@@ -4,6 +4,7 @@ using TMPro;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine.SceneManagement;
+using System.Collections;
 using System.Collections.Generic;
 using Unity.Services.Core;
 using Unity.Services.Authentication;
@@ -36,6 +37,12 @@ public class SimpleNetworkManager : NetworkBehaviour
     [SerializeField] private Button returnButton;
     [SerializeField] private Button leaveButton;
 
+    [Header("Countdown UI")]
+    [SerializeField] private GameObject countdownPanel;
+    [SerializeField] private Slider countdownSlider;
+    [SerializeField] private TMP_Text countdownText;
+    [SerializeField] private float countdownDuration = 5f;
+
     private string playerName = "Player";
     private string currentRoomCode;
     private NetworkManager networkManager;
@@ -50,6 +57,11 @@ public class SimpleNetworkManager : NetworkBehaviour
 
     private async void Start()
     {
+        leaveButton.gameObject.SetActive(false);
+        codeRoomText.gameObject.SetActive(false);
+        copyButton.gameObject.SetActive(false);
+        countdownPanel.SetActive(false);
+
         networkManager = NetworkManager.Singleton;
         transport = networkManager.GetComponent<UnityTransport>();
 
@@ -61,16 +73,17 @@ public class SimpleNetworkManager : NetworkBehaviour
 
         hostButton.onClick.AddListener(StartHost);
         joinButton.onClick.AddListener(StartClient);
-        startChatButton.onClick.AddListener(LoadChatScene);
+        startChatButton.onClick.AddListener(() => 
+        {
+            if (IsServer)
+                StartCountdownServerRpc();
+        });
 
         networkManager.OnClientConnectedCallback += OnClientConnected;
         networkManager.OnClientDisconnectCallback += OnClientDisconnected;
 
         returnButton.onClick.AddListener(() => SceneManager.LoadScene("MainMenu"));
         leaveButton.onClick.AddListener(LeaveGame);
-        leaveButton.gameObject.SetActive(false);
-        codeRoomText.gameObject.SetActive(false);
-        copyButton.gameObject.SetActive(false);
 
         nameButton.onClick.AddListener(SetPlayerName);
     }
@@ -355,6 +368,51 @@ public class SimpleNetworkManager : NetworkBehaviour
         foreach (var player in players)
         {
             AddPlayerToList(player.clientId, player.playerName.ToString());
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void StartCountdownServerRpc()
+    {
+        StartCoroutine(StartCountdown());
+    }
+
+    private IEnumerator StartCountdown()
+    {
+        float elapsed = 0f;
+        countdownPanel.SetActive(true);
+
+        UpdateCountdownClientRpc(countdownDuration, elapsed);
+
+        while (elapsed < countdownDuration)
+        {
+            elapsed += Time.deltaTime;
+            UpdateCountdownClientRpc(countdownDuration, elapsed);
+            yield return null;
+        }
+
+        LoadGameSceneClientRpc();
+    }
+
+    [ClientRpc]
+    private void UpdateCountdownClientRpc(float duration, float elapsed)
+    {
+        if (countdownPanel == null) return;
+
+        countdownPanel.SetActive(true);
+        float progress = Mathf.Clamp01(elapsed / duration);
+        countdownSlider.value = progress;
+
+        float remaining = Mathf.Ceil(duration - elapsed);
+        countdownText.text = $"Starting in {remaining}";
+    }
+
+    [ClientRpc]
+    private void LoadGameSceneClientRpc()
+    {
+        if (IsHost)
+        {
+            networkManager.SceneManager.LoadScene(chatSceneName, LoadSceneMode.Single);
         }
     }
 

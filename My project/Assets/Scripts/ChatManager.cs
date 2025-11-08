@@ -22,6 +22,9 @@ public class ChatManager : NetworkBehaviour
     [Header("Settings")]
     [SerializeField] private int maxMessages = 50;
 
+    private ChatClient client;
+    private bool sendToServer = false;
+
     private void Start()
     {
         StartCoroutine(StartCountdown());
@@ -29,6 +32,25 @@ public class ChatManager : NetworkBehaviour
         sendButton.onClick.AddListener(SendMessage);
         messageInputField.onSubmit.AddListener(delegate { SendMessage(); });
         messageInputField.ActivateInputField();
+
+        SimpleNetworkManager netManager = FindObjectOfType<SimpleNetworkManager>();
+        if (netManager != null && netManager.impostorClientId.Value == ulong.MaxValue)
+        {
+            Debug.Log("Activating TCP client");
+            client = new ChatClient();
+            sendToServer = client.Connect("127.0.0.1", 65432);
+
+            if (sendToServer)
+            {
+                client.OnMessageReceived += (response) =>
+                {
+                    UnityMainThreadDispatcher.Instance().Enqueue(() =>
+                    {
+                        AddMessageToChat("AI", response);
+                    });
+                };
+            }
+        }
     }
 
     private IEnumerator StartCountdown()
@@ -50,21 +72,26 @@ public class ChatManager : NetworkBehaviour
     public void SendMessage()
     {
         string messageText = messageInputField.text.Trim();
-        
+    
         if (string.IsNullOrEmpty(messageText))
             return;
 
-        // Enviar mensaje al servidor
+        if (sendToServer && client != null)
+        {
+            // Si el impostor es la IA, enviar al script Python
+            client.SendMessage(messageText);
+        }
+
+        // Enviar mensaje al servidor Netcode normal
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
         {
             SendMessageServerRpc(messageText);
         }
         else
         {
-            // Si no hay conexión, solo muestra localmente (modo prueba)
             AddMessageToChat("You", messageText);
         }
-        
+    
         messageInputField.text = "";
         messageInputField.ActivateInputField();
     }

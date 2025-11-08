@@ -21,6 +21,7 @@ public class ChatManager : NetworkBehaviour
 
     [Header("Settings")]
     [SerializeField] private int maxMessages = 50;
+    [SerializeField] private bool useAIChat = true;
 
     private ChatClient client;
     private bool sendToServer = false;
@@ -33,23 +34,56 @@ public class ChatManager : NetworkBehaviour
         messageInputField.onSubmit.AddListener(delegate { SendMessage(); });
         messageInputField.ActivateInputField();
 
-        SimpleNetworkManager netManager = FindObjectOfType<SimpleNetworkManager>();
-        if (netManager != null && netManager.impostorClientId.Value == ulong.MaxValue)
-        {
-            Debug.Log("Activating TCP client");
-            client = new ChatClient();
-            sendToServer = client.Connect("127.0.0.1", 65432);
+        // Initialize main thread dispatcher
+        UnityMainThreadDispatcher.Instance();
+        Debug.Log("Main thread dispatcher initialized");
 
-            if (sendToServer)
+        // Initialize AI chat if enabled
+        if (useAIChat)
+        {
+            InitializeAIChat();
+        }
+    }
+
+    private void InitializeAIChat()
+    {
+        Debug.Log("=== Initializing AI Chat (TCP client) ===");
+        client = new ChatClient();
+        sendToServer = client.Connect("127.0.0.1", 65432);
+
+        if (sendToServer)
+        {
+            Debug.Log("Successfully connected to AI server");
+            client.OnMessageReceived += OnAIMessageReceived;
+            Debug.Log("Event subscription complete");
+        }
+        else
+        {
+            Debug.LogWarning("Failed to connect to AI server");
+        }
+    }
+
+    private void OnAIMessageReceived(string response)
+    {
+        Debug.Log($"=== OnAIMessageReceived called ===");
+        Debug.Log($"Response: {response}");
+        Debug.Log($"Thread ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+        
+        // Use the dispatcher to update UI on main thread
+        try
+        {
+            UnityMainThreadDispatcher.Instance().Enqueue(() =>
             {
-                client.OnMessageReceived += (response) =>
-                {
-                    UnityMainThreadDispatcher.Instance().Enqueue(() =>
-                    {
-                        AddMessageToChat("AI", response);
-                    });
-                };
-            }
+                Debug.Log($"=== Executing on main thread ===");
+                Debug.Log($"Main Thread ID: {System.Threading.Thread.CurrentThread.ManagedThreadId}");
+                Debug.Log($"About to call AddMessageToChat with: AI - {response}");
+                AddMessageToChat("AI", response);
+            });
+            Debug.Log("Message enqueued to main thread");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Error enqueueing message: {e.Message}\n{e.StackTrace}");
         }
     }
 
@@ -57,16 +91,25 @@ public class ChatManager : NetworkBehaviour
     {
         float remaining = countdownTime;
 
-        countdownPanel.SetActive(true);
+        if (countdownPanel != null)
+        {
+            countdownPanel.SetActive(true);
+        }
 
         while (remaining > 0)
         {
-            countdownText.text = Mathf.Ceil(remaining).ToString();
+            if (countdownText != null)
+            {
+                countdownText.text = Mathf.Ceil(remaining).ToString();
+            }
             yield return new WaitForSeconds(1f);
             remaining--;
         }
 
-        countdownPanel.SetActive(false);
+        if (countdownPanel != null)
+        {
+            countdownPanel.SetActive(false);
+        }
     }
 
     public void SendMessage()
@@ -76,19 +119,29 @@ public class ChatManager : NetworkBehaviour
         if (string.IsNullOrEmpty(messageText))
             return;
 
+        Debug.Log($"=== SendMessage called with: {messageText} ===");
+
+        // Send to AI server if connected
         if (sendToServer && client != null)
         {
-            // Si el impostor es la IA, enviar al script Python
+            Debug.Log($"Sending message to AI server: {messageText}");
             client.SendMessage(messageText);
         }
+        else
+        {
+            Debug.Log($"Not sending to AI server (sendToServer: {sendToServer}, client: {client != null})");
+        }
 
-        // Enviar mensaje al servidor Netcode normal
+        // Send message to Netcode network (other players)
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient)
         {
+            Debug.Log("Sending via NetworkManager");
             SendMessageServerRpc(messageText);
         }
         else
         {
+            // If not connected to network, just show locally
+            Debug.Log("Showing message locally only");
             AddMessageToChat("You", messageText);
         }
     
@@ -99,12 +152,12 @@ public class ChatManager : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     private void SendMessageServerRpc(string message, ServerRpcParams rpcParams = default)
     {
-        // Obtener el ID del cliente que envió el mensaje
+        // Get the client ID that sent the message
         ulong senderId = rpcParams.Receive.SenderClientId;
         
         Debug.Log($"Server received message from client {senderId}: {message}");
         
-        // Reenviar a TODOS los clientes (incluyendo el que lo envió)
+        // Broadcast to ALL clients (including sender)
         ReceiveMessageClientRpc(senderId, message);
     }
 
@@ -113,7 +166,7 @@ public class ChatManager : NetworkBehaviour
     {
         Debug.Log($"Client received message from {senderId}: {message}");
         
-        // Determinar el nombre del remitente
+        // Determine sender name
         string senderName;
         if (NetworkManager.Singleton != null && senderId == NetworkManager.Singleton.LocalClientId)
         {
@@ -129,29 +182,80 @@ public class ChatManager : NetworkBehaviour
 
     private void AddMessageToChat(string sender, string message)
     {
-        // Limitar número de mensajes
+        Debug.Log($"=== AddMessageToChat START ===");
+        Debug.Log($"Sender: '{sender}'");
+        Debug.Log($"Message: '{message}'");
+        Debug.Log($"messageContent null? {messageContent == null}");
+        Debug.Log($"messagePrefab null? {messagePrefab == null}");
+        
+        if (messageContent == null)
+        {
+            Debug.LogError("messageContent is NULL! Cannot add message.");
+            return;
+        }
+
+        if (messagePrefab == null)
+        {
+            Debug.LogError("messagePrefab is NULL! Cannot add message.");
+            return;
+        }
+
+        // Limit number of messages
         if (messageContent.childCount >= maxMessages)
         {
+            Debug.Log($"Removing oldest message (current count: {messageContent.childCount})");
             Destroy(messageContent.GetChild(0).gameObject);
         }
 
-        // Crear nuevo mensaje
+        // Create new message
+        Debug.Log("Instantiating message prefab...");
         GameObject newMessage = Instantiate(messagePrefab, messageContent);
+        Debug.Log($"Message instantiated: {newMessage.name}");
+        
         TMP_Text messageText = newMessage.GetComponentInChildren<TMP_Text>();
         
         if (messageText != null)
         {
-            messageText.text = $"<b>{sender}:</b> {message}";
+            string formattedMessage = $"<b>{sender}:</b> {message}";
+            messageText.text = formattedMessage;
+            Debug.Log($"Message text set: {formattedMessage}");
+            Debug.Log($"Message active in hierarchy? {newMessage.activeInHierarchy}");
+            Debug.Log($"Message parent: {newMessage.transform.parent.name}");
+            Debug.Log($"Total messages in chat: {messageContent.childCount}");
+        }
+        else
+        {
+            Debug.LogError("Could not find TMP_Text component in message prefab!");
+            Debug.LogError($"Prefab structure: {GetGameObjectHierarchy(newMessage)}");
         }
 
-        // Scroll al final
-        Canvas.ForceUpdateCanvases();
-        scrollRect.verticalNormalizedPosition = 0f;
+        // Scroll to bottom
+        if (scrollRect != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            scrollRect.verticalNormalizedPosition = 0f;
+            Debug.Log("Scrolled to bottom");
+        }
+        
+        Debug.Log($"=== AddMessageToChat END ===\n");
+    }
+
+    private string GetGameObjectHierarchy(GameObject obj, int level = 0)
+    {
+        string indent = new string(' ', level * 2);
+        string result = $"{indent}- {obj.name}\n";
+        
+        foreach (Transform child in obj.transform)
+        {
+            result += GetGameObjectHierarchy(child.gameObject, level + 1);
+        }
+        
+        return result;
     }
 
     private void Update()
     {
-        // Enviar con Enter (sin Shift)
+        // Send with Enter (without Shift)
         if (Input.GetKeyDown(KeyCode.Return) && 
             !Input.GetKey(KeyCode.LeftShift) && 
             !Input.GetKey(KeyCode.RightShift))
@@ -160,6 +264,17 @@ public class ChatManager : NetworkBehaviour
             {
                 messageInputField.ActivateInputField();
             }
+        }
+    }
+
+    private void OnDestroy()
+    {
+        // Clean up TCP connection
+        if (client != null)
+        {
+            Debug.Log("Cleaning up ChatClient");
+            client.OnMessageReceived -= OnAIMessageReceived;
+            client.Disconnect();
         }
     }
 }

@@ -34,16 +34,24 @@ public class ChatManager : NetworkBehaviour
         messageInputField.onSubmit.AddListener(delegate { SendMessage(); });
         messageInputField.ActivateInputField();
 
-        // Initialize main thread dispatcher
         UnityMainThreadDispatcher.Instance();
         Debug.Log("Main thread dispatcher initialized");
 
-        // Initialize AI chat if enabled
-        if (useAIChat)
+        SimpleNetworkManager netManager = FindObjectOfType<SimpleNetworkManager>();
+        if (netManager != null)
         {
-            InitializeAIChat();
+            if (netManager.impostorClientId.Value == ulong.MaxValue)
+            {
+                InitializeAIChat();
+                sendToServer = true;
+            }
+            else
+            {
+                sendToServer = false;
+            }
         }
     }
+
 
     private void InitializeAIChat()
     {

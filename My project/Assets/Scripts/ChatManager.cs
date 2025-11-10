@@ -4,6 +4,8 @@ using TMPro;
 using Unity.Netcode;
 using Unity.Collections;
 using System.Collections;
+using System.Collections.Generic;
+using UnityEngine.SceneManagement;
 
 public class ChatManager : NetworkBehaviour
 {
@@ -23,19 +25,28 @@ public class ChatManager : NetworkBehaviour
     [SerializeField] private int maxMessages = 50;
     [SerializeField] private bool useAIChat = true;
 
+    [Header("Results")]
+    [SerializeField] private GameObject resultsPanel;
+    [SerializeField] private Button voteHumanButton;
+    [SerializeField] private Button voteAIButton;
+    [SerializeField] private TMP_Text resultText;
+
     private ChatClient client;
     private bool sendToServer = false;
+
+    private NetworkVariable<int> totalVotes = new NetworkVariable<int>(0);
+    private NetworkVariable<int> correctVotes = new NetworkVariable<int>(0);
+    private HashSet<ulong> playersVoted = new HashSet<ulong>();
 
     private void Start()
     {
         StartCoroutine(StartCountdown());
 
-        sendButton.onClick.AddListener(SendMessage);
-        messageInputField.onSubmit.AddListener(delegate { SendMessage(); });
+        sendButton.onClick.AddListener(SendMessages);
+        messageInputField.onSubmit.AddListener(delegate { SendMessages(); });
         messageInputField.ActivateInputField();
 
         UnityMainThreadDispatcher.Instance();
-        Debug.Log("Main thread dispatcher initialized");
 
         SimpleNetworkManager netManager = FindObjectOfType<SimpleNetworkManager>();
         if (netManager != null)
@@ -50,6 +61,15 @@ public class ChatManager : NetworkBehaviour
                 sendToServer = false;
             }
         }
+
+        if (resultsPanel != null)
+            resultsPanel.SetActive(false);
+
+        if (voteHumanButton != null)
+            voteHumanButton.onClick.AddListener(() => SubmitVote(false));
+
+        if (voteAIButton != null)
+            voteAIButton.onClick.AddListener(() => SubmitVote(true));
     }
 
 
@@ -115,12 +135,89 @@ public class ChatManager : NetworkBehaviour
         }
 
         if (countdownPanel != null)
-        {
             countdownPanel.SetActive(false);
+        
+
+        if (resultsPanel != null)
+            resultsPanel.SetActive(true);
+    }
+
+    public void StartVotingPhase()
+    {
+        if (resultText != null)
+            resultText.text = "";
+    }
+
+    private void SubmitVote(bool votedAI)
+    {
+        if (resultsPanel != null)
+            resultsPanel.SetActive(false);
+
+        Debug.Log($"Player {NetworkManager.Singleton.LocalClientId} voted {(votedAI ? "IA" : "Humano")}");
+        SubmitVoteServerRpc(votedAI, NetworkManager.Singleton.LocalClientId);
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void SubmitVoteServerRpc(bool votedAI, ulong senderId)
+    {
+        if (playersVoted.Contains(senderId))
+            return; // ya votó
+
+        playersVoted.Add(senderId);
+        totalVotes.Value++;
+
+        // Revisar si el voto fue correcto
+        SimpleNetworkManager netManager = FindObjectOfType<SimpleNetworkManager>();
+        bool isAI = netManager != null && netManager.impostorClientId.Value == ulong.MaxValue;
+
+        bool voteIsCorrect = (votedAI && isAI) || (!votedAI && !isAI);
+        if (voteIsCorrect)
+            correctVotes.Value++;
+
+        // Si todos votaron, mostrar resultado
+        if (totalVotes.Value >= NetworkManager.Singleton.ConnectedClients.Count)
+        {
+            bool allCorrect = correctVotes.Value == totalVotes.Value;
+            ShowVotingResultClientRpc(allCorrect, correctVotes.Value, totalVotes.Value);
+
+            // Reiniciar para futuras rondas si quisieras
+            playersVoted.Clear();
+            totalVotes.Value = 0;
+            correctVotes.Value = 0;
         }
     }
 
-    public void SendMessage()
+    [ClientRpc]
+    private void ShowVotingResultClientRpc(bool allCorrect, int correct, int total)
+    {
+        if (resultsPanel != null)
+            resultsPanel.SetActive(true);
+
+        string impostorType = "unknown";
+        SimpleNetworkManager netManager = FindObjectOfType<SimpleNetworkManager>();
+        if (netManager != null)
+        {
+            impostorType = (netManager.impostorClientId.Value == ulong.MaxValue) ? "IA" : "human";
+        }
+
+        if (resultText != null)
+        {
+            if (allCorrect)
+                resultText.text = $"¡Everyone got it right! ({correct}/{total})\n\nThe impostor was: {impostorType}";
+            else
+                resultText.text = $"Some failed ({correct}/{total})\n\nThe impostor was: {impostorType}";
+        }
+
+        StartCoroutine(ReturnToMenuAfterDelay(10f));
+    }
+
+    private IEnumerator ReturnToMenuAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        SceneManager.LoadScene("ConnectionMenu");
+    }
+
+    public void SendMessages()
     {
         string messageText = messageInputField.text.Trim();
     

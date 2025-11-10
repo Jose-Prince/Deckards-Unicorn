@@ -1,7 +1,6 @@
 import os
 import torch
-from transformers import GPT2Tokenizer
-from gpt_model import GPT
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 from load_data import load_dataset
 from train_model import train
 from tcp_server import start_server
@@ -13,8 +12,9 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
 
-    model = GPT(vocab_size=len(tokenizer), n_embd=256, n_heads=8, n_layers=4, block_size=128).to(device)
-
+    model = GPT2LMHeadModel.from_pretrained("gpt2").to(device)
+    model.resize_token_embeddings(len(tokenizer))
+    
     model_path = "models/gpt_dialog_model.pt"
 
     if not os.path.exists(model_path):

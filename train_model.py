@@ -47,8 +47,9 @@ def train(tokenizer, model, train_loader, val_loader, epochs=5, lr=3e-4):
             input_ids = batch["input_ids"].to(device)
             labels = batch["labels"].to(device)
 
-            outputs = model(input_ids)
-            loss = loss_fn(outputs.view(-1, outputs.size(-1)), labels.view(-1))
+            outputs = model(input_ids, labels=labels)
+            logits = outputs.logits
+            loss = loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
 
             if torch.isnan(loss):
                 print("NaN loss detected, skipping batch")
@@ -71,8 +72,9 @@ def train(tokenizer, model, train_loader, val_loader, epochs=5, lr=3e-4):
                 input_ids = batch["input_ids"].to(device)
                 labels = batch["labels"].to(device)
 
-                outputs = model(input_ids)
-                loss = loss_fn(outputs.view(-1, outputs.size(-1)), labels.view(-1))
+                outputs = model(input_ids, labels=labels)
+                logits = outputs.logits
+                loss = loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_loader)

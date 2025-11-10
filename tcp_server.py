@@ -1,8 +1,7 @@
 import socket
 import torch
 from generate_text import generate_text
-from transformers import GPT2Tokenizer
-from gpt_model import GPT
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -11,8 +10,8 @@ def start_server(host="127.0.0.1", port=5050):
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
 
-    model = GPT(vocab_size=len(tokenizer), n_embd=256, n_heads=8, n_layers=4, block_size=128).to(device)
-    model.load_state_dict(torch.load("models/gpt_dialog_model.pt", map_location=device))
+    model = GPT2LMHeadModel.from_pretrained("gpt2")
+    model.load_state_dict(torch.load("models/gpt2_dialog_model.pt", map_location=device))
     model.eval()
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

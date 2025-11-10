@@ -3,3 +3,6 @@ datasets
 pandas
 transformers
 scikit-learn
+shap
+matplotlib
+ipython

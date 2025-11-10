@@ -11,17 +11,21 @@ def start_server(host="127.0.0.1", port=65432):
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
 
-    # Load fine-tuned GPT-2 model
-    model_path = "models/gpt_dialog_model"
+    # Load GPT-2 base model first
+    model = GPT2LMHeadModel.from_pretrained("gpt2")
+    model.resize_token_embeddings(len(tokenizer))
     
-    if os.path.exists(model_path):
-        # Load with from_pretrained (matches save_pretrained in training)
-        model = GPT2LMHeadModel.from_pretrained(model_path)
-        print(f"✓ Fine-tuned GPT-2 loaded from {model_path}")
+    # Load fine-tuned weights from .pt file
+    model_pt_path = "models/gpt_dialog_model.pt"
+    
+    if os.path.exists(model_pt_path):
+        # Load state dict from .pt file
+        state_dict = torch.load(model_pt_path, map_location=device)
+        model.load_state_dict(state_dict)
+        print(f"Fine-tuned GPT-2 loaded from {model_pt_path}")
     else:
-        # Fallback to base GPT-2 if fine-tuned model doesn't exist
-        print("⚠️ Fine-tuned model not found, using base GPT-2")
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        print(f"Fine-tuned model not found at {model_pt_path}")
+        print("Using base GPT-2 (not trained on your data)")
     
     model.to(device)
     model.eval()
@@ -46,7 +50,6 @@ def start_server(host="127.0.0.1", port=65432):
                     model, 
                     tokenizer, 
                     data, 
-                    max_new_tokens=35,
                     temperature=0.85
                 )
                 print(f"AI: {response}\n")

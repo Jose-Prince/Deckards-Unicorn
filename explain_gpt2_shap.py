@@ -5,7 +5,7 @@ import numpy as np
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 import matplotlib.pyplot as plt
 
-print("🔍 Initializing SHAP Analysis for Conversational AI...")
+print("Initializing SHAP Analysis for Conversational AI...")
 
 # --- Model Configuration ---
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -23,19 +23,15 @@ model_pt_path = "models/gpt_dialog_model.pt"
 if os.path.exists(model_pt_path):
     state_dict = torch.load(model_pt_path, map_location=device)
     model.load_state_dict(state_dict)
-    print(f"✅ Fine-tuned GPT-2 loaded from {model_pt_path}")
+    print(f"Fine-tuned GPT-2 loaded from {model_pt_path}")
 else:
-    print(f"⚠️ Fine-tuned model not found, using base GPT-2")
+    print(f"Fine-tuned model not found, using base GPT-2")
 
 model.to(device)
 model.eval()
 
-print("\n" + "="*60)
 print("SHAP EXPLAINABLE AI ANALYSIS")
-print("="*60)
 
-
-# --- Prediction Function for SHAP ---
 def predict_probabilities(texts):
     """
     Predict probability distribution over vocabulary for next token.
@@ -82,10 +78,6 @@ def predict_probabilities(texts):
 
 
 def predict_next_token(texts):
-    """
-    Simpler prediction function that returns probability of most likely token.
-    Faster for SHAP analysis.
-    """
     if isinstance(texts, str):
         texts = [texts]
     elif not isinstance(texts, list):
@@ -109,8 +101,6 @@ def predict_next_token(texts):
         
         return max_probs.cpu().numpy()
 
-
-# --- Analyze Multiple Conversational Examples ---
 prompts = [
     "Hello, how are you",
     "What is your name",
@@ -121,7 +111,6 @@ prompts = [
 
 print("\n📊 Analyzing conversational prompts with SHAP...\n")
 
-# Create SHAP explainer
 print("Creating SHAP explainer (this may take a moment)...")
 explainer = shap.Explainer(
     predict_next_token, 
@@ -139,7 +128,7 @@ for i, prompt in enumerate(prompts):
         shap_values = explainer([prompt])
         
         # Display text plot
-        print("\n📈 Token Importance Visualization:")
+        print("\nToken Importance Visualization:")
         shap.plots.text(shap_values[0], display=True)
         
         # Get predicted next token
@@ -149,10 +138,10 @@ for i, prompt in enumerate(prompts):
             predicted_token_id = outputs.logits[0, -1, :].argmax().item()
             predicted_token = tokenizer.decode([predicted_token_id])
         
-        print(f"\n🎯 Predicted next token: '{predicted_token}'")
+        print(f"\nPredicted next token: '{predicted_token}'")
         
         # Show token contributions
-        print("\n📊 Token Contribution Scores:")
+        print("\nToken Contribution Scores:")
         tokens = shap_values[0].data
         values = shap_values[0].values
         
@@ -164,13 +153,9 @@ for i, prompt in enumerate(prompts):
         print(f"⚠️ Error analyzing prompt: {e}")
         continue
 
-print("\n" + "="*60)
-
 
 # --- Detailed Analysis: Compare Similar Prompts ---
 print("\n🔬 DETAILED ANALYSIS: Impact of Specific Words")
-print("="*60)
-
 comparison_pairs = [
     ("I am happy", "I am sad"),
     ("Hello friend", "Hello stranger"),
@@ -197,26 +182,10 @@ for prompt1, prompt2 in comparison_pairs:
         tokens1 = shap_values_1[0].data
         values1 = shap_values_1[0].values
         
-        key_token = tokens1[-1]  # Last token is usually most different
+        key_token = tokens1[-1]
         key_value = values1[-1]
         
-        print(f"  Key token '{key_token}' impact: {key_value:.4f}")
+        print(f"Key token '{key_token}' impact: {key_value:.4f}")
         
     except Exception as e:
-        print(f"  ⚠️ Error: {e}")
-
-
-# --- Summary Statistics ---
-print("\n" + "="*60)
-print("📈 SUMMARY STATISTICS")
-print("="*60)
-
-print("\n✅ Analysis Complete!")
-print("\nKey Insights:")
-print("• Positive SHAP values → Token increases model confidence")
-print("• Negative SHAP values → Token decreases model confidence")
-print("• Larger absolute values → Greater impact on prediction")
-print("\nUse this to understand:")
-print("  - Which words make responses more/less confident")
-print("  - How context affects next token prediction")
-print("  - Model's sensitivity to specific phrases")
+        print(f"Error: {e}")

@@ -1,11 +1,8 @@
 import os
 import torch
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
-from generate_text import generate_human_like_response  # 👈 Usa tus funciones personalizadas
+from generate_text import generate_human_like_response
 
-# ===============================
-# CONFIGURACIÓN DEL MODELO
-# ===============================
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 model_path = "models/gpt_dialog_model.pt"
@@ -20,16 +17,13 @@ model.resize_token_embeddings(len(tokenizer))
 if os.path.exists(model_path):
     state_dict = torch.load(model_path, map_location=device)
     model.load_state_dict(state_dict)
-    print(f"✅ Modelo fine-tuneado cargado desde {model_path}")
+    print(f"Modelo fine-tuneado cargado desde {model_path}")
 else:
-    print("⚠️ No se encontró el modelo fine-tuneado, se usará el GPT-2 base.")
+    print("No se encontró el modelo fine-tuneado, se usará el GPT-2 base.")
 
 model.to(device)
 model.eval()
 
-# ===============================
-# FUNCIÓN DE CHAT
-# ===============================
 def chat(prompt):
     """Usa las funciones de generación personalizadas."""
     response = generate_human_like_response(
@@ -42,9 +36,6 @@ def chat(prompt):
     return response
 
 
-# ===============================
-# PREGUNTAS PARA EL TEST DE TURING
-# ===============================
 test_levels = {
     "Nivel 1 – Conversación casual": [
         "Hello! How are you doing today?",
@@ -79,15 +70,9 @@ test_levels = {
     ]
 }
 
-
-# ===============================
-# EJECUCIÓN DEL TEST
-# ===============================
 for level, questions in test_levels.items():
-    print("\n" + "=" * 80)
-    print(f"🧠 {level}")
-    print("=" * 80)
+    print(f"{level}")
     for q in questions:
-        print(f"\n🗣️ Pregunta: {q}")
+        print(f"\nPregunta: {q}")
         answer = chat(q)
-        print(f"🤖 Respuesta: {answer}")
+        print(f"Respuesta: {answer}")

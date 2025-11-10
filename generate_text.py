@@ -17,10 +17,16 @@ def generate_text(model, tokenizer, prompt, max_length=60, temperature=0.85, top
     with torch.no_grad():
         for _ in range(max_length):
             context = tokens[:, -block_size:] if tokens.size(1) > block_size else tokens
-            outputs = model(context)
-            logits = outputs.logits if hasattr(outputs, 'logits') else outputs
-            logits = logits[:, -1, :] / temperature
 
+            outputs = model(context)
+            
+            if hasattr(outputs, 'logits'):
+                logits = outputs.logits
+            else:
+                logits = outputs
+            
+            logits = logits[:, -1, :] / temperature
+            
             if torch.isnan(logits).any() or torch.isinf(logits).any():
                 print("NaN/Inf detected in logits, stopping generation")
                 break
@@ -36,10 +42,14 @@ def generate_text(model, tokenizer, prompt, max_length=60, temperature=0.85, top
             if top_p < 1.0:
                 sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
                 cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+                
                 sorted_indices_to_remove = cumulative_probs > top_p
                 sorted_indices_to_remove[:, 0] = False
+                
                 sorted_probs[sorted_indices_to_remove] = 0.0
+                
                 sorted_probs = sorted_probs / (sorted_probs.sum(dim=-1, keepdim=True) + 1e-10)
+                
                 next_token_idx = torch.multinomial(sorted_probs, num_samples=1)
                 next_token = sorted_indices.gather(-1, next_token_idx)
             else:
@@ -60,62 +70,48 @@ def generate_text(model, tokenizer, prompt, max_length=60, temperature=0.85, top
     return response if response else generated_text
 
 
-def generate_human_like_response(model, tokenizer, prompt, max_new_tokens=20, temperature=0.7):
-    system_prompt = (
-        "You are a normal human chatting casually. "
-        "Never mention that you are an AI, robot, or language model. "
-        "If someone asks if you are an AI, just respond naturally or with humor."
-    )
-
-    full_prompt = f"{system_prompt}\nHuman: {prompt}\nYou:"
-
+def generate_human_like_response(model, tokenizer, prompt, max_new_tokens=35, temperature=0.85):
     response = generate_text(
-        model,
-        tokenizer,
-        full_prompt,
-        max_length=max_new_tokens + len(tokenizer.encode(full_prompt)),
+        model, 
+        tokenizer, 
+        prompt, 
+        max_length=max_new_tokens + len(tokenizer.encode(prompt)),
         temperature=temperature,
-        top_p=0.8,
+        top_p=0.92,
         top_k=50
     )
-
-    response = post_process_response(response, full_prompt)
+    
+    response = post_process_response(response, prompt)
+    
     return response
 
 
 def post_process_response(text, original_prompt):
     text = text.strip()
-
+    
     if text.lower().startswith(original_prompt.lower()):
         text = text[len(original_prompt):].strip()
-
-    forbidden_phrases = [
-        "I am an AI",
-        "I'm an AI",
-        "As an AI",
-        "I am a language model",
-        "I'm a machine",
-        "I am not human",
-        "I’m not human",
-        "As a robot"
-    ]
-    for phrase in forbidden_phrases:
-        if phrase.lower() in text.lower():
-            text = text.replace(phrase, "I'm just someone who likes chatting.")
-
+    
     for delimiter in ['. ', '! ', '? ']:
         if delimiter in text:
-            text = text.split(delimiter)[0] + delimiter.strip()
+            text = text.split(delimiter)[0] + delimiter.rstrip()
             break
-
+    
     if '\n' in text:
         text = text.split('\n')[0].strip()
-
+    
+    incomplete_patterns = ['and your', 'and I', 'and the', 'and my']
+    for pattern in incomplete_patterns:
+        if text.strip().lower().startswith(pattern):
+            text = text.replace(pattern, '').strip()
+    
     words = text.split()
     if len(words) > 20:
-        text = ' '.join(words[:20]).rstrip(",;:-") + '.'
-
-    if not text or len(text) < 2:
-        return "Hmm, interesting question."
-
+        text = ' '.join(words[:20])
+        if text[-1] not in '.!?':
+            text += '...'
+    
+    if not text or len(text.strip()) < 2:
+        return "Hey there!"
+    
     return text.strip()

@@ -25,65 +25,125 @@ class EarlyStopping:
                 self.early_stop = True
 
 
-def train(tokenizer, model, train_loader, val_loader, epochs=5, lr=3e-4):
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
-    device = "cpu"
+def train(tokenizer, model, train_loader, val_loader, epochs=10, lr=3e-4):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     print(f"\nTraining on: {device.upper()}")
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(train_loader) * epochs)
+    total_steps = len(train_loader) * epochs
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_steps)
     loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id)
 
-    early_stopping = EarlyStopping(patience=3, save_path="gpt_dialog_model.pt")
+    early_stopping = EarlyStopping(patience=5, save_path="models/gpt_dialog_model.pt")
 
     for epoch in range(epochs):
         model.train()
         total_loss = 0
+        num_batches = 0
         train_progress = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
 
         for batch in train_progress:
             optimizer.zero_grad()
+            
             input_ids = batch["input_ids"].to(device)
-            labels = batch["labels"].to(device)
+            attention_mask = batch["attention_mask"].to(device) if "attention_mask" in batch else None
 
-            outputs = model(input_ids, labels=labels)
-            logits = outputs.logits
-            loss = loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
+            inputs = input_ids[:, :-1]
+            targets = input_ids[:, 1:]
+            
+            if attention_mask is not None:
+                attn_mask = attention_mask[:, :-1]
+            else:
+                attn_mask = None
 
-            if torch.isnan(loss):
-                print("NaN loss detected, skipping batch")
+            # Forward pass
+            outputs = model(inputs, attention_mask=attn_mask)
+            
+            if hasattr(outputs, 'logits'):
+                logits = outputs.logits
+            else:
+                logits = outputs
+            
+            loss = loss_fn(
+                logits.contiguous().view(-1, logits.size(-1)),
+                targets.contiguous().view(-1)
+            )
+
+            # Check for NaN
+            if torch.isnan(loss) or torch.isinf(loss):
+                print("NaN/Inf loss detected, skipping batch")
                 continue
 
+            # Backward pass
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             scheduler.step()
 
             total_loss += loss.item()
-            train_progress.set_postfix({"loss": f"{loss.item():.4f}"})
+            num_batches += 1
+            
+            train_progress.set_postfix({
+                "loss": f"{loss.item():.4f}",
+                "lr": f"{scheduler.get_last_lr()[0]:.2e}"
+            })
 
-        avg_train_loss = total_loss / len(train_loader)
+        avg_train_loss = total_loss / num_batches if num_batches > 0 else float('inf')
 
+        # Validation
         model.eval()
         val_loss = 0
+        num_val_batches = 0
+        
         with torch.no_grad():
-            for batch in tqdm(val_loader, desc="Validating", leave=False):
+            val_progress = tqdm(val_loader, desc="Validating", leave=False)
+            for batch in val_progress:
                 input_ids = batch["input_ids"].to(device)
-                labels = batch["labels"].to(device)
+                attention_mask = batch["attention_mask"].to(device) if "attention_mask" in batch else None
 
-                outputs = model(input_ids, labels=labels)
-                logits = outputs.logits
-                loss = loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
-                val_loss += loss.item()
+                # Same splitting for validation
+                inputs = input_ids[:, :-1]
+                targets = input_ids[:, 1:]
+                
+                if attention_mask is not None:
+                    attn_mask = attention_mask[:, :-1]
+                else:
+                    attn_mask = None
 
-        avg_val_loss = val_loss / len(val_loader)
-        print(f"\nEpoch {epoch+1}/{epochs} - Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+                outputs = model(inputs, attention_mask=attn_mask)
+
+                if hasattr(outputs, "logits"):
+                    logits = outputs.logits
+                else:
+                    logits = outputs
+
+                loss = loss_fn(
+                    logits.contiguous().view(-1, logits.size(-1)),
+                    targets.contiguous().view(-1)
+                )
+                
+                if not torch.isnan(loss) and not torch.isinf(loss):
+                    val_loss += loss.item()
+                    num_val_batches += 1
+
+        avg_val_loss = val_loss / num_val_batches if num_val_batches > 0 else float('inf')
+        
+        print(f"\n{'='*60}")
+        print(f"Epoch {epoch+1}/{epochs}")
+        print(f"  Train Loss: {avg_train_loss:.4f}")
+        print(f"  Val Loss:   {avg_val_loss:.4f}")
+        print(f"  Learning Rate: {scheduler.get_last_lr()[0]:.2e}")
+        print(f"{'='*60}")
 
         early_stopping(avg_val_loss, model)
         if early_stopping.early_stop:
             print("Training stopped early.")
             break
 
-    print("Training complete.")
-
+    print("\nTraining complete!")
+    
+    # Save final model
+    if not early_stopping.early_stop:
+        torch.save(model.state_dict(), "models/gpt_dialog_model.pt")
+        print("Final model saved")

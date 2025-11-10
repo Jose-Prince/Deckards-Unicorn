@@ -1,7 +1,7 @@
 import socket
 
-HOST = "127.0.0.1"  # Debe coincidir con el del servidor
-PORT = 65432        # Mismo puerto
+HOST = "127.0.0.1"
+PORT = 65432
 
 print("Connecting to AI server...")
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -29,22 +29,10 @@ def tokenize_function(examples):
     )
 
 def load_dataset():
-    """Load and prepare the conversational dataset."""
-    print("Loading datasets...")
-    
-    train_df = pd.read_csv("data/train.csv")
-    valid_df = pd.read_csv("data/validation.csv")
-    test_df = pd.read_csv("data/test.csv")
-    
-    print(f"Train samples: {len(train_df)}")
-    print(f"Validation samples: {len(valid_df)}")
-    print(f"Test samples: {len(test_df)}")
+    train_df = pd.read_csv("data/UnifiedDataset/train.csv")
+    valid_df = pd.read_csv("data/UnifiedDataset/validation.csv")
+    test_df = pd.read_csv("data/UnifiedDataset/test.csv")
 
-    # Clean text data
-    for df in [train_df, valid_df, test_df]:
-        df["dialog"] = df["dialog"].apply(clean_text)
-
-    # Create HuggingFace datasets
     train_dataset = Dataset.from_pandas(train_df)
     validation_dataset = Dataset.from_pandas(valid_df)
     test_dataset = Dataset.from_pandas(test_df)
@@ -56,34 +44,20 @@ def load_dataset():
     })
 
     # Tokenize datasets
-    print("Tokenizing datasets...")
-    tokenized = dataset.map(tokenize_function, batched=True, remove_columns=["dialog"])
-    
-    # Add labels (same as input_ids for language modeling)
-    tokenized = tokenized.map(lambda x: {"labels": x["input_ids"]}, batched=True)
-    
-    # Set format for PyTorch
-    tokenized.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+    print("Tokenizing dataset...")
+    tokenized_datasets = dataset.map(tokenize_function, batched=True)
 
-    # Create DataLoaders with better batch size
-    # Increase batch size for better training stability
-    batch_size = 8 if torch.cuda.is_available() else 4
-    
-    train_loader = DataLoader(
-        tokenized["train"], 
-        batch_size=batch_size, 
-        shuffle=True,
-        num_workers=0  # Set to 0 to avoid multiprocessing issues
+    tokenized_datasets = tokenized_datasets.map(
+        lambda x: {"labels": x["input_ids"]},
+        batched=True
     )
-    
-    val_loader = DataLoader(
-        tokenized["validation"], 
-        batch_size=batch_size,
-        num_workers=0
-    )
-    
-    print(f"Using batch size: {batch_size}")
-    print(f"Training batches: {len(train_loader)}")
-    print(f"Validation batches: {len(val_loader)}")
 
-    return train_loader, val_loader
+    tokenized_datasets.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+
+
+    train_loader = DataLoader(tokenized_datasets["train"], batch_size=8, shuffle=True)
+    val_loader = DataLoader(tokenized_datasets["validation"], batch_size=8)
+    test_loader = DataLoader(tokenized_datasets["test"], batch_size=8)
+
+    return train_loader, val_loader, test_loader
+
